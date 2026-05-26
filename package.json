@@ -1,0 +1,12 @@
+{
+  "name": "llm-observe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace root for the llm-observe monorepo.",
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "build": "pnpm --filter @llm-observe/web build",
+    "dev": "pnpm --filter @llm-observe/web dev",
+    "typecheck": "pnpm --filter @llm-observe/web typecheck"
+  }
+}
