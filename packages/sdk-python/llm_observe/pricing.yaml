@@ -1,0 +1,90 @@
+# Per-1k-token pricing in USD. Updated 2026-05-01.
+# When a model fires that isn't in this map the SDK logs a warning and records
+# total_cost=0 with metadata.cost_missing=true.
+openai:
+  gpt-4o:
+    input_per_1k: 0.0025
+    output_per_1k: 0.01
+  gpt-4o-2024-08-06:
+    input_per_1k: 0.0025
+    output_per_1k: 0.01
+  gpt-4o-mini:
+    input_per_1k: 0.00015
+    output_per_1k: 0.0006
+  gpt-4-turbo:
+    input_per_1k: 0.01
+    output_per_1k: 0.03
+  gpt-3.5-turbo:
+    input_per_1k: 0.0005
+    output_per_1k: 0.0015
+
+anthropic:
+  claude-3-5-sonnet-latest:
+    input_per_1k: 0.003
+    output_per_1k: 0.015
+  claude-3-5-sonnet-20241022:
+    input_per_1k: 0.003
+    output_per_1k: 0.015
+  claude-3-5-haiku-latest:
+    input_per_1k: 0.001
+    output_per_1k: 0.005
+  claude-3-opus-latest:
+    input_per_1k: 0.015
+    output_per_1k: 0.075
+
+google:
+  gemini-1.5-pro:
+    input_per_1k: 0.00125
+    output_per_1k: 0.005
+  gemini-1.5-flash:
+    input_per_1k: 0.000075
+    output_per_1k: 0.0003
+
+deepseek:
+  deepseek-chat:
+    input_per_1k: 0.00014
+    output_per_1k: 0.00028
+
+xai:
+  grok-2:
+    input_per_1k: 0.002
+    output_per_1k: 0.01
+
+# OpenRouter exposes 300+ upstream models through one OpenAI-compatible API.
+# The 'model' field is the OpenRouter slug 'provider/model'. We seed a small
+# popular subset here; anything not in this map sets metadata.cost_missing=true
+# (the cost catalog can be refreshed at runtime from /api/v1/models).
+openrouter:
+  openai/gpt-4o:
+    input_per_1k: 0.0025
+    output_per_1k: 0.01
+  openai/gpt-4o-mini:
+    input_per_1k: 0.00015
+    output_per_1k: 0.0006
+  anthropic/claude-3.5-sonnet:
+    input_per_1k: 0.003
+    output_per_1k: 0.015
+  anthropic/claude-3-5-sonnet:
+    input_per_1k: 0.003
+    output_per_1k: 0.015
+  anthropic/claude-3.5-haiku:
+    input_per_1k: 0.001
+    output_per_1k: 0.005
+  google/gemini-1.5-pro:
+    input_per_1k: 0.00125
+    output_per_1k: 0.005
+  google/gemini-1.5-flash:
+    input_per_1k: 0.000075
+    output_per_1k: 0.0003
+  deepseek/deepseek-chat:
+    input_per_1k: 0.00014
+    output_per_1k: 0.00028
+  x-ai/grok-2:
+    input_per_1k: 0.002
+    output_per_1k: 0.01
+  meta-llama/llama-3.1-70b-instruct:
+    input_per_1k: 0.00088
+    output_per_1k: 0.00088
+  mistralai/mistral-large:
+    input_per_1k: 0.003
+    output_per_1k: 0.009
