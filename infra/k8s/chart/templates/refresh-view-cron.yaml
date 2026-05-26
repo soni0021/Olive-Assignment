@@ -1,0 +1,32 @@
+{{- if .Values.refreshHourlyView.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: refresh-hourly-view
+  labels: { {{- include "llm-observe.labels" . | nindent 4 }} }
+spec:
+  schedule: {{ .Values.refreshHourlyView.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: refresh
+              image: "{{ .Values.image.repository }}-ingestion:{{ .Values.image.ingestionTag }}"
+              command:
+                - python
+                - -c
+                - |
+                  import asyncio, asyncpg, os
+                  async def main():
+                      dsn = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+                      conn = await asyncpg.connect(dsn)
+                      try:
+                          await conn.execute("SELECT refresh_inference_logs_hourly()")
+                      finally:
+                          await conn.close()
+                  asyncio.run(main())
+              env: {{- include "llm-observe.envCommon" . | nindent 16 }}
+{{- end }}

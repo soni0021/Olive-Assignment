@@ -1,0 +1,43 @@
+# LiteLLM proxy configuration.
+#
+# This proxy is the historical fallback path for Gemini / DeepSeek / Grok in
+# the providers.ts router. With OpenRouter integrated, you can route those
+# through OpenRouter instead and keep LiteLLM disabled — but the config is
+# left here so the option remains available.
+#
+# Required env vars (set in .env loaded by docker-compose):
+#   GOOGLE_API_KEY     for gemini/*
+#   DEEPSEEK_API_KEY   for deepseek/*
+#   XAI_API_KEY        for xai/*
+#   LITELLM_MASTER_KEY clients send this as `Authorization: Bearer <key>`
+
+model_list:
+  - model_name: gemini-1.5-pro
+    litellm_params:
+      model: gemini/gemini-1.5-pro
+      api_key: os.environ/GOOGLE_API_KEY
+
+  - model_name: gemini-1.5-flash
+    litellm_params:
+      model: gemini/gemini-1.5-flash
+      api_key: os.environ/GOOGLE_API_KEY
+
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  - model_name: grok-2
+    litellm_params:
+      model: xai/grok-2
+      api_key: os.environ/XAI_API_KEY
+
+general_settings:
+  # Reject any model_name not in the list above — keeps the proxy from
+  # accidentally proxying to providers we don't intend to call.
+  pass_through_endpoints: false
+
+litellm_settings:
+  drop_params: true
+  # Don't fail closed if a provider lacks a feature OpenAI exposes (e.g.
+  # logit_bias on Gemini); strip silently and proceed.

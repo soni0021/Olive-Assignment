@@ -1,0 +1,161 @@
+# Single-file stack for llm-observe.
+#
+# Bring everything up:
+#   cd infra/docker
+#   docker compose --env-file ../../.env up --build
+#
+# Then open http://localhost:3000 for the chat UI and
+#       http://localhost:3000/dashboard for the metrics view.
+#
+# Provider API keys come from the .env at the repo root (copy .env.example).
+# All services share a single bridge network and depend on health checks
+# of postgres + redis so startup ordering is deterministic.
+
+name: llm-observe
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: observe
+      POSTGRES_PASSWORD: observe
+      POSTGRES_DB: observe
+    ports:
+      # Host port intentionally non-standard to avoid colliding with other
+      # local Postgres instances. Internal port stays 5432; DATABASE_URL in
+      # the other services uses the service name + 5432 over the docker net.
+      - "5532:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observe -d observe"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      # Non-standard host port for the same reason as postgres above.
+      - "6479:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: services/ingestion/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://observe:observe@postgres:5432/observe
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingestion:
+    build:
+      context: ../..
+      dockerfile: services/ingestion/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://observe:observe@postgres:5432/observe
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/healthz\")' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/ingestion/Dockerfile
+      args:
+        # Bake Presidio + en_core_web_lg into the worker only. Adds ~600MB to
+        # the image but keeps PII redaction quality at production levels.
+        # Set to "0" to skip and use regex-only redaction (faster build).
+        WITH_NLP: ${WITH_NLP:-0}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://observe:observe@postgres:5432/observe
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: INFO
+      WORKER_NAME: worker-1
+    command: ["python", "-m", "workers.consumer"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # LiteLLM proxy. Used by the web app for non-native providers (Gemini,
+  # DeepSeek, Grok) when you prefer it over OpenRouter. Safe to leave running
+  # even if unused — providers.ts only hits it when the `openrouter` provider
+  # isn't selected. Disable by removing this block or scaling to 0.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-local}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:4000/health/liveliness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      OBSERVE_INGESTION_URL: http://ingestion:8000/v1/logs
+      OBSERVE_INGESTION_BASE: http://ingestion:8000
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-local}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-http://localhost:3000}
+      OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-llm-observe}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OBSERVE_API_KEY: ${OBSERVE_API_KEY:-}
+      CONFIG_RUNTIME_PATH: /app/config/runtime.yaml
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persists the settings page's edits across container restarts. The host
+      # path is gitignored so secrets entered via the UI don't accidentally
+      # land in commits.
+      - ../config:/app/config
+    depends_on:
+      ingestion:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

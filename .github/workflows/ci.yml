@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install shared-schema
+        run: uv pip install --system ./packages/shared-schema/python
+      - name: Install sdk-python with dev deps
+        run: uv pip install --system -e "./packages/sdk-python[dev]"
+      - name: Install ingestion with dev deps
+        run: uv pip install --system -e "./services/ingestion[dev]"
+      - name: Ruff
+        run: uv tool run ruff check .
+      - name: Pytest
+        run: uv tool run pytest --cov=llm_observe --cov=api --cov-report=term-missing

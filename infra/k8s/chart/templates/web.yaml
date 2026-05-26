@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { {{- include "llm-observe.labels" . | nindent 4 }} }
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: "{{ .Values.image.repository }}-web:{{ .Values.image.webTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: OBSERVE_INGESTION_URL
+              value: "http://ingestion:8000/v1/logs"
+            - name: OBSERVE_INGESTION_BASE
+              value: "http://ingestion:8000"
+            - name: OBSERVE_API_KEY
+              valueFrom: { secretKeyRef: { name: web-secrets, key: api-key, optional: true } }
+            - name: OPENAI_API_KEY
+              valueFrom: { secretKeyRef: { name: provider-keys, key: openai, optional: true } }
+            - name: ANTHROPIC_API_KEY
+              valueFrom: { secretKeyRef: { name: provider-keys, key: anthropic, optional: true } }
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: { app: web }
+  ports:
+    - port: 80
+      targetPort: 3000
+{{- if .Values.web.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: {{ .Values.web.ingress.className }}
+  tls:
+    - hosts: [{{ .Values.web.ingress.host | quote }}]
+      secretName: {{ .Values.web.ingress.tlsSecret }}
+  rules:
+    - host: {{ .Values.web.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port: { number: 80 }
+{{- end }}

@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-{{ .Release.Revision }}
+  labels: { {{- include "llm-observe.labels" . | nindent 4 }} }
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}-ingestion:{{ .Values.image.ingestionTag }}"
+          command: ["alembic", "upgrade", "head"]
+          env: {{- include "llm-observe.envCommon" . | nindent 12 }}

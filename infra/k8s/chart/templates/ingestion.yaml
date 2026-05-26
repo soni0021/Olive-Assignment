@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion
+  labels: { {{- include "llm-observe.labels" . | nindent 4 }} }
+spec:
+  replicas: {{ .Values.ingestion.replicas }}
+  selector:
+    matchLabels: { app: ingestion }
+  template:
+    metadata:
+      labels: { app: ingestion }
+    spec:
+      containers:
+        - name: ingestion
+          image: "{{ .Values.image.repository }}-ingestion:{{ .Values.image.ingestionTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env: {{- include "llm-observe.envCommon" . | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources: {{- toYaml .Values.ingestion.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion
+spec:
+  selector: { app: ingestion }
+  ports:
+    - port: 8000
+      targetPort: 8000
+{{- if .Values.ingestion.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ingestion
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ingestion
+  minReplicas: {{ .Values.ingestion.hpa.minReplicas }}
+  maxReplicas: {{ .Values.ingestion.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.ingestion.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

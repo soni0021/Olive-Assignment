@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels: { {{- include "llm-observe.labels" . | nindent 4 }} }
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}-ingestion:{{ .Values.image.workerTag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "workers.consumer"]
+          env:
+            - name: WORKER_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            {{- include "llm-observe.envCommon" . | nindent 12 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+{{- if .Values.worker.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: {{ .Values.worker.hpa.minReplicas }}
+  maxReplicas: {{ .Values.worker.hpa.maxReplicas }}
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: redis_stream_pending
+          selector:
+            matchLabels:
+              stream: "telemetry:v1"
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.worker.hpa.targetStreamBacklog | quote }}
+{{- end }}

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: llm-observe
+description: Multi-provider LLM observability platform.
+type: application
+version: 0.1.0
+appVersion: "0.4.0"
+maintainers:
+  - name: llm-observe

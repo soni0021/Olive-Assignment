@@ -1,0 +1,70 @@
+image:
+  repository: llm-observe
+  ingestionTag: "0.4.0"
+  workerTag: "0.4.0"
+  webTag: "0.4.0"
+  pullPolicy: IfNotPresent
+
+ingestion:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+worker:
+  replicas: 2
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: 2000m, memory: 2Gi }
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    # Scale on Redis stream backlog. Requires prometheus-redis-exporter +
+    # prometheus-adapter wired into the cluster. See infra/k8s/README.md.
+    targetStreamBacklog: 10000
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  ingress:
+    enabled: true
+    className: nginx
+    host: chat.example.com
+    tlsSecret: chat-tls
+
+postgres:
+  # In real prod, set enabled=false and provide an external DATABASE_URL via secret.
+  # Self-hosted Postgres on K8s is high-risk for an analytical store.
+  enabled: true
+  image: postgres:16-alpine
+  storage: 50Gi
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits:   { cpu: 2000m, memory: 4Gi }
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  storage: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi }
+
+config:
+  # Connection strings overlap with what docker-compose sets; in prod these
+  # come from secrets, not values.yaml.
+  databaseUrl: "postgresql+asyncpg://observe:observe@postgres:5432/observe"
+  redisUrl: "redis://redis:6379/0"
+  logLevel: INFO
+
+refreshHourlyView:
+  enabled: true
+  schedule: "*/5 * * * *"
